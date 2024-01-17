@@ -6,56 +6,11 @@
 
 #define HBLK_MAGIC "\x48\x42\x4c\x4b"
 #define HBLK_VERSION "0.1"
-#define HBLK_HEADER_LEN 12 
+#define HBLK_HEADER_LEN 12
 #define INVALID_FD(fd) ((fd) < 0)
 
-static int write_header(int fd, const uint32_t n_blocks)
-{
-	char buf[HBLK_HEADER_LEN + 1] =
-		HBLK_MAGIC		/* magic bytes */ \
-		HBLK_VERSION		/* 0.1 */ \
-		"\x00"			/* endianness placeholder */ \
-		"\x00\x00\x00\x00";	/* block-count placeholder */
-
-	buf[7] = (char)_get_endianness();
-	memcpy(buf + 8, &n_blocks, 4);
-
-	if (write(fd, buf, HBLK_HEADER_LEN) == HBLK_HEADER_LEN)
-		return (1);
-
-	return (0);
-}
-
-static int write_block(int fd, const block_t *block)
-{
-	ssize_t tmp;
-
-	/* write block info */
-	tmp = write(fd, block, sizeof(block_info_t));
-
-	if (tmp < (ssize_t)sizeof(block_info_t))
-		return (0);
-
-	/* write data length */
-	tmp = write(fd, &block->data.len, 4);
-
-	if (tmp < (ssize_t)4)
-		return (0);
-
-	/* write data */
-	tmp = write(fd, block->data.buffer, block->data.len);
-
-	if (tmp < (ssize_t)block->data.len)
-		return (0);
-
-	/* write hash */
-	tmp = write(fd, block->hash, SHA256_DIGEST_LENGTH);
-
-	if (tmp < SHA256_DIGEST_LENGTH)
-		return (0);
-
-	return (1);
-}
+static int write_header(int fd, const uint32_t n_blocks);
+static int write_block(int fd, const block_t *block);
 
 /**
  * blockchain_serialize - Serializes blockchain in memory to a file
@@ -98,4 +53,65 @@ int blockchain_serialize(const blockchain_t *blockchain, const char *path)
 
 	close(fd);
 	return (0);
+}
+
+/**
+ * write_header - Writes HBLK header to file descriptor
+ * @fd: File descriptor (output)
+ * @n_blocks: Number of blocks on the chain
+ *
+ * Return: 1 on success, 0 on failure
+ */
+static int write_header(int fd, const uint32_t n_blocks)
+{
+	char buf[HBLK_HEADER_LEN + 1] = HBLK_MAGIC /* magic bytes */
+		HBLK_VERSION		/* 0.1 */
+		"\x00"			/* endianness placeholder */
+		"\x00\x00\x00\x00";	/* block-count placeholder */
+
+	buf[7] = (char)_get_endianness();
+	memcpy(buf + 8, &n_blocks, 4);
+
+	if (write(fd, buf, HBLK_HEADER_LEN) == HBLK_HEADER_LEN)
+		return (1);
+
+	return (0);
+}
+
+/**
+ * write_block - Writes block from the chain to file descriptor
+ * @fd: File descriptor (output)
+ * @block: Pointer to block_t structure
+ *
+ * Return: 1 on success, 0 on failure
+*/
+static int write_block(int fd, const block_t *block)
+{
+	ssize_t tmp;
+
+	/* write block info */
+	tmp = write(fd, block, sizeof(block_info_t));
+
+	if (tmp < (ssize_t)sizeof(block_info_t))
+		return (0);
+
+	/* write data length */
+	tmp = write(fd, &block->data.len, 4);
+
+	if (tmp < (ssize_t)4)
+		return (0);
+
+	/* write data */
+	tmp = write(fd, block->data.buffer, block->data.len);
+
+	if (tmp < (ssize_t)block->data.len)
+		return (0);
+
+	/* write hash */
+	tmp = write(fd, block->hash, SHA256_DIGEST_LENGTH);
+
+	if (tmp < SHA256_DIGEST_LENGTH)
+		return (0);
+
+	return (1);
 }
