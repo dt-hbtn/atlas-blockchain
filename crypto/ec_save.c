@@ -6,14 +6,18 @@
 #include <openssl/pem.h>
 #include "hblk_crypto.h"
 
-static int
-mkdir_if_not_exists(const char *path);
+#define MAX_PATH_LEN 4096
+
+#define JOIN_PATH(dest, dir, file) \
+	snprintf((dest), MAX_PATH_LEN - 1, "%s/%s", (dir), (file))
+
+static char PATH_BUF[MAX_PATH_LEN] = { '\0' };
 
 static int
-write_private(EC_KEY *key, const char *dir, const size_t dir_len);
+mkdir_p(const char *path);
 
 static int
-write_public(EC_KEY *key, const char *dir, const size_t dir_len);
+write_ec_key(EC_KEY *key, const char *dir, const int private);
 
 /**
  * ec_save - saves EC key pair to files
@@ -25,100 +29,44 @@ write_public(EC_KEY *key, const char *dir, const size_t dir_len);
 int
 ec_save(EC_KEY *key, const char *folder)
 {
-	size_t dir_len;
-
-	if (!key || !folder)
+	if (!key || !folder || !*folder)
 		return (0);
 
-	dir_len = strlen(folder);
-
-	if (!dir_len)
+	if (!mkdir_p(folder))
 		return (0);
 
-	if (!mkdir_if_not_exists(folder))
-		return (0);
-
-	while (dir_len && folder[dir_len - 1] == '/')
-		--dir_len;
-
-	if (!write_private(key, folder, dir_len))
-		return (0);
-
-	if (!write_public(key, folder, dir_len))
-		return (0);
-
-	return (1);
+	return (write_ec_key(key, folder, 1) && write_ec_key(key, folder, 0));
 }
 
 static int
-mkdir_if_not_exists(const char *path)
+mkdir_p(const char *path)
 {
+	int result;
 	struct stat stat_buf;
-	int path_invalid, mkdir_failed;
 
-	path_invalid = stat(path, &stat_buf);
+	result = stat(path, &stat_buf)
+		? !mkdir(path, 0777)
+		: S_ISDIR(stat_buf.st_mode);
 
-	if (!path_invalid)
-		return (S_ISDIR(stat_buf.st_mode));
-
-	mkdir_failed = mkdir(path, 0777);
-	return (!mkdir_failed);
+	return (result);
 }
 
 static int
-write_private(EC_KEY *key, const char *dir, const size_t dir_len)
+write_ec_key(EC_KEY *key, const char *dir, const int private)
 {
-	char *filepath = NULL;
 	FILE *file = NULL;
+	int result;
 
-	filepath = calloc(dir_len + 9, sizeof(char));
-
-	if (!filepath)
-		return (0);
-
-	sprintf(filepath, "%.*s/" PRI_FILENAME, (int)dir_len, dir);
-
-	file = fopen(filepath, "w");
-	free(filepath);
+	JOIN_PATH(PATH_BUF, dir, private ? PRI_FILENAME : PUB_FILENAME);
+	file = fopen(PATH_BUF, "w");
 
 	if (!file)
 		return (0);
 
-	if (PEM_write_ECPrivateKey(file, key, NULL, NULL, 0, NULL, NULL) != 1)
-	{
-		fclose(file);
-		return (0);
-	}
+	result = private
+		? PEM_write_ECPrivateKey(file, key, NULL, NULL, 0, NULL, NULL)
+		: PEM_write_EC_PUBKEY(file, key);
 
 	fclose(file);
-	return (1);
-}
-
-static int
-write_public(EC_KEY *key, const char *dir, const size_t dir_len)
-{
-	char *filepath = NULL;
-	FILE *file = NULL;
-
-	filepath = calloc(dir_len + 13, sizeof(char));
-
-	if (!filepath)
-		return (0);
-
-	sprintf(filepath, "%.*s/" PUB_FILENAME, (int)dir_len, dir);
-
-	file = fopen(filepath, "w");
-	free(filepath);
-
-	if (!file)
-		return (0);
-
-	if (PEM_write_EC_PUBKEY(file, key) != 1)
-	{
-		fclose(file);
-		return (0);
-	}
-
-	fclose(file);
-	return (1);
+	return (result);
 }
