@@ -5,11 +5,7 @@
 #include <unistd.h>
 #include <openssl/pem.h>
 #include "hblk_crypto.h"
-
-#define MAX_PATH_LEN 4096
-
-#define JOIN_PATH(dest, dir, file) \
-	snprintf((dest), MAX_PATH_LEN - 1, "%s/%s", (dir), (file))
+#include "_macros.h"
 
 static char PATH_BUF[MAX_PATH_LEN] = { '\0' };
 
